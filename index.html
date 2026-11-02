@@ -1,0 +1,85 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><title>Karma Cards Prototype</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--gold:#d4b25c;--bg:#0b0b14;--ink:#efe6cf;--panel:#14141f;--green:#46f0a0;--cy:#6cc6ff}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(ellipse at 50% 30%,#1b1b33,var(--bg) 70%);color:var(--ink);font:13px "Segoe UI","Noto Sans Thai",sans-serif;overflow:hidden}
+button{padding:5px 10px;background:#262638;color:var(--ink);border:1px solid var(--gold);border-radius:4px;cursor:pointer;font:inherit}
+button:hover{background:#34344d}
+button.main{background:linear-gradient(#8a6a1e,#5e4610);font-weight:700}
+button.big{display:block;width:100%;font-size:15px;padding:9px;margin:8px 0}
+#app{display:grid;grid-template-columns:minmax(230px,1fr) min(58vw,108vh) minmax(230px,1fr);gap:10px;height:100vh;padding:8px}
+aside{display:flex;flex-direction:column;gap:8px;min-height:0}
+#left h1{font:600 18px Georgia,serif;letter-spacing:3px;color:var(--gold);margin:0;text-align:center}
+.box{background:var(--panel);border:1px solid #3a3550;border-radius:6px;padding:8px}
+#hint{border-color:#2f8f66;background:#12251d;font-size:12.5px;line-height:1.45}
+#msg{color:#ffd35c;font-weight:700;min-height:18px}
+.turn{font-size:14px}.ph{padding:1px 8px;border-radius:10px;background:#444}.ph.rite{background:#2c6e8c}.ph.war{background:#8c2c2c}.ph.dusk{background:#5a2c8c}
+#log{flex:1;min-height:80px;overflow:auto;font-size:11px;line-height:1.5;color:#c9c2ad}
+#center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:0}
+.board{position:relative;aspect-ratio:1672/941;background:url(board.webp) center/100% 100%;border-radius:10px;container-type:inline-size;border:2px solid #2a2a3c}
+.board.main{width:100%;box-shadow:0 0 24px #d4b25c55;border-color:var(--gold)}
+.board.opp{width:52%;filter:saturate(.8)}
+.board.opp::after{content:"";position:absolute;inset:0;background:#0006;border-radius:8px;pointer-events:none}
+.who{position:absolute;left:50%;top:-2.2cqw;transform:translateX(-50%);z-index:3;font-size:1.5cqw;background:#000a;padding:.1cqw 1.2cqw;border-radius:2cqw;color:#bbb;white-space:nowrap}
+.board.opp .who{top:-3.4cqw;font-size:2.4cqw}.who.on{color:#ffd35c}
+.zn{position:absolute;padding:.35cqw;display:flex;flex-direction:column;overflow:hidden}
+.cnt{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-shadow:0 0 .6cqw #000,0 0 .6cqw #000}
+.cnt span{font:700 3.6cqw Georgia,serif;color:#fff;line-height:1}.cnt small{font-size:1.05cqw;color:#e6d9ae}
+.cnt.sm{flex:0 0 auto;flex-direction:row;gap:.6cqw}.cnt.sm span{font-size:2cqw}.cnt.hid span{font-size:3cqw}
+.shr{display:flex;flex-direction:column;gap:.5cqw;height:100%;align-items:stretch}
+.shr .cnt{flex:0 0 auto;margin-top:2cqw}
+.tile{flex:1;max-height:5cqw;background:linear-gradient(#5a4a1c,#2d250d);border:1px solid var(--gold);border-radius:.4cqw;font-size:.8cqw;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden}
+.chips{display:flex;flex-wrap:wrap;gap:.2cqw;overflow:auto;align-content:flex-start;flex:1}
+.chips span{background:#000b;border:1px solid #777;padding:0 .35cqw;font-size:.85cqw;border-radius:.3cqw}
+.chips span.hl{outline:2px solid var(--green);cursor:pointer;color:var(--green)}
+.sc{position:relative;flex:1;min-height:0;background:linear-gradient(160deg,#272642f2,#14142af2);border:1px solid var(--gold);border-radius:.6cqw;padding:.45cqw .6cqw;display:flex;flex-direction:column;gap:.15cqw;overflow:hidden;cursor:default}
+.sc.t2{border-color:#6cc6ff}.sc.t3{border-color:#ff9a4a;box-shadow:0 0 1cqw #ff9a4a66}
+.sc.sov{border-color:#ffd35c;background:linear-gradient(160deg,#4a3a12f2,#1e1608f2)}
+.sc.seal{border-color:#a98cff}.sc.back{background:repeating-linear-gradient(45deg,#3a2f12,#3a2f12 .5cqw,#2a220c .5cqw,#2a220c 1cqw);align-items:center;justify-content:center;text-align:center;font-size:1cqw;color:#aaa}
+.sc.can{cursor:pointer;outline:.25cqw solid #6cc6ff}.sc.sel{outline:.3cqw solid #ffd35c;transform:scale(1.03)}
+.sc.hl{outline:.35cqw solid var(--green);cursor:pointer;animation:pulse 1s infinite}.sc.used{opacity:.55}
+@keyframes pulse{50%{outline-color:#fff}}
+.nm{font-weight:700;font-size:1.1cqw;line-height:1.15;color:#fff}.tr{font-size:.85cqw;color:var(--cy)}
+.pw{display:flex;gap:.8cqw;font:700 1.35cqw Georgia,serif}.pw .a{color:#ff9d7a}.pw .d{color:#8fd0ff}
+.pw .up{color:#7dffb0}.pw .dn{color:#ff5a5a}
+.tx{font-size:.78cqw;color:#c9c2ad;line-height:1.3;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.tg{font-size:.8cqw;color:#ffd35c}
+.ab{font-size:.95cqw;padding:.15cqw .5cqw;margin-top:auto;align-self:flex-start}
+.dot{position:absolute;right:.4cqw;top:.4cqw;width:.8cqw;height:.8cqw;border-radius:50%}.dot.ok{background:#46f08a}.dot.warn{background:#ff9a4a}
+.hand{display:flex;gap:.6cqw;height:100%;align-items:stretch}
+.hc{position:relative;flex:0 1 13.5%;min-width:0;background:linear-gradient(160deg,#2a2848f2,#15152cf2);border:1px solid #6b6585;border-radius:.6cqw;padding:.4cqw .5cqw;overflow:hidden;opacity:.75;display:flex;flex-direction:column;gap:.15cqw}
+.hc .nm{font-size:1cqw}.hc .tr{font-size:.8cqw}.hc .tx{font-size:.72cqw;-webkit-line-clamp:5}
+.hc.ok{opacity:1;border-color:var(--green);box-shadow:0 0 1cqw #46f0a088;cursor:pointer}
+.hc.ok:hover{transform:translateY(-1cqw)}
+.hc.spirit{border-top:.3cqw solid #ff9a4a}.hc.mantra{border-top:.3cqw solid #6cc6ff}.hc.sanct{border-top:.3cqw solid #8f8}.hc.seal{border-top:.3cqw solid #a98cff}
+#detail{line-height:1.45;overflow:auto;flex:1;min-height:0}
+#detail b{font-size:15px;color:#ffd35c}
+.ok{color:#4f8}.warn{color:#fa5}
+#modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:20}
+#modal.top{background:none;align-items:flex-start;pointer-events:none}#modal.top .mbox{pointer-events:auto;margin-top:12px}
+.mbox{background:#1b1b2e;border:2px solid var(--gold);border-radius:8px;padding:16px;max-width:460px;min-width:280px;max-height:90vh;overflow:auto;font-size:15px}
+.mt{white-space:pre-wrap;margin-bottom:8px;line-height:1.4}
+.mbox button{display:block;width:100%;margin:6px 0;padding:9px;font-size:14px}.mbox .skip{opacity:.7}
+.mn{font-size:12px}.mn summary{cursor:pointer;color:#aaa}.mn button{margin:2px}
+select{background:#222;color:var(--ink);border:1px solid var(--gold);padding:3px}
+@media(max-width:1000px){body{overflow:auto}#app{display:block;height:auto}.board.main{width:100%}aside{margin:8px 0}}
+</style></head><body>
+<div id="app">
+  <aside id="left">
+    <h1>KARMA CARDS</h1>
+    <div class="box">P1 <select id="e0"></select> P2 <select id="e1"></select>
+      <button class="main" onclick="startGame()">เริ่มเกมใหม่</button>
+      <button onclick="fullscreen()">เต็มจอ ⛶</button><br>
+      <label><input type="checkbox" id="dbg" onchange="if(G){G.debug=this.checked;render()}"> โหมด debug (เห็นมือ/Shrine ทุกฝั่ง)</label></div>
+    <div id="hint" class="box">กด "เริ่มเกมใหม่" เพื่อเริ่ม</div>
+    <div id="msg"></div>
+    <div id="bar" class="box"></div>
+    <div id="log" class="box"></div>
+  </aside>
+  <main id="center"><div id="b1" class="board opp"></div><div id="b0" class="board main"></div></main>
+  <aside id="right"><div id="detail" class="box">เอาเมาส์ชี้การ์ดเพื่อดูข้อความเต็ม<br><br><span class="ok">● เขียว</span> = ความสามารถทำงานอัตโนมัติ<br><span class="warn">● ส้ม</span> = ยังไม่ทำงาน (ใช้แค่ค่า ATK/DEF)<br><br>ธาตุ Agni ทำความสามารถครบแล้ว ธาตุอื่นยังเป็นสถิติอย่างเดียว</div></aside>
+</div>
+<div id="modal"></div>
+<script src="cards.js"></script><script src="game.js"></script><script src="agni.js"></script><script src="ui.js"></script></body></html>
