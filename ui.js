@@ -10,7 +10,7 @@ const typeLabel=c=>c.type==='spirit'?`T${c.tier}${c.tribe?' · '+c.tribe:''}`:c.
 
 function spiritHtml(pi,i,sp,mini){
   const c=sp.card,h=sp.silenced?{}:H(c),A=stat(pi,sp,'atk'),D=stat(pi,sp,'def');
-  const hlT=G.sel&&G.sel.kind==='atk'&&pi!==G.t&&legalTargets(G.t,P(G.t).field[G.sel.slot]).spirits.some(x=>x.slot===i);
+  const hlT=G.sel&&G.sel.kind==='atk'&&pi!==G.t&&legalTargets(G.t,fighter(G.t,G.sel.slot)).spirits.some(x=>x.slot===i);
   const hlP=G.pick&&G.pick.cands.some(x=>x.pi===pi&&x.slot===i),hlM=G.sel&&G.sel.kind==='manualKill';
   const can=pi===G.t&&G.phase==='war'&&canAttack(pi,sp),selA=G.sel&&G.sel.kind==='atk'&&pi===G.t&&G.sel.slot===i;
   const tags=(sp.locked?'🔒 ล็อค ':'')+(sp.silenced?'🔇 ปิดความสามารถ ':'')+(sp.attacks?`⚔ ${sp.attacks}/${maxAtk(pi,sp)}`:'');
@@ -33,14 +33,14 @@ function boardHtml(pi,main){
   const p=P(pi),active=pi===G.t,showAll=active||G.debug,s=p.sov,sh=SOVH[num(s.card)]||{};
   let h=`<div class="who ${active?'on':''}">P${pi+1} · ${p.el}${active?' · เทิร์นนี้':''}</div>`;
   h+=zone(Z.gem,`<div class="cnt"><span>${p.gems}</span><small>Karma Gem</small></div>`,'gem');
-  h+=zone(Z.shrine,`<div class="shr"><div class="cnt"><span>${p.shrine.length}</span><small>Shrine</small></div>${p.shrine.map((c,k)=>`<div class="tile" title="${G.debug?esc(c.en):'Shrine คว่ำ'}">${G.debug?esc(c.th):''}</div>`).join('')}</div>`);
+  h+=zone(Z.shrine,`<div class="shr"><div class="cnt"><span>${p.shrine.length}</span><small>${p.shrine.length?'Shrine':'Shrine หมด · ตี Sovereign = ชนะ'}</small></div>${p.shrine.map((c,k)=>`<div class="tile" title="${G.debug?esc(c.en):'Shrine คว่ำ'}">${G.debug?esc(c.th):''}</div>`).join('')}</div>`);
   Z.sp.forEach((a,i)=>{const sp=p.field[i];h+=zone(a,sp?spiritHtml(pi,i,sp,!main):'')});
   h+=zone(Z.sanct,p.sanct?`<div class="sc t2" onmouseover="show(${p.sanct.uid})">${dot(p.sanct)}<div class="nm">${esc(p.sanct.th)}</div><div class="tr">Sanctuary</div>${main?`<div class="tx">${esc(p.sanct.text)}</div>`:''}</div>`:'');
   let sb='';for(let k=1;k<=s.tier;k++)if(sh[k]&&sh[k].act&&active&&sh[k].act.can({pi}))sb+=`<button class="ab" onclick="act(()=>onSovAct(${k}))">${sh[k].act.label}</button>`;
   const need=s.tier<3?s.card.asc[s.tier-1]:0;
   h+=zone(Z.sov,`<div class="sc sov" onmouseover="show(${s.card.uid})"><div class="nm">${esc(s.card.th)}</div><div class="tr">Sovereign T${s.tier}</div>
     <div class="pw"><span class="a">⚔ ${s.card.hp[s.tier-1]}</span></div>${main?`<div class="tx">${esc(s.card.text)}</div>`:''}
-    ${active&&G.phase==='rite'&&s.tier<3?`<button class="ab main" onclick="act(onAscendClick)">Ascend → T${s.tier+1} (${need} Gem)</button>`:''}${sb}</div>`);
+    ${active&&G.phase==='rite'&&s.tier<3?`<button class="ab main" onclick="act(onAscendClick)">Ascend → T${s.tier+1} (${need} Gem)</button>`:''}${active&&G.phase==='war'?`<button class="ab main" ${canSovAttack(pi)?'':'disabled'} onclick="selectSov();render()">⚔ Sovereign โจมตี (1 Gem)</button>`:''}${sb}</div>`);
   Z.trap.forEach((a,k)=>{const c=p.seals[k];let inner='';
     if(c){if(showAll){const man=active&&!H(c).trigger&&G.win===null;
       inner=`<div class="sc seal" onmouseover="show(${c.uid})">${dot(c)}<div class="nm">${esc(c.th)}</div><div class="tr">เปิด ${c.act} Gem</div>${man?`<button class="ab" onclick="act(()=>manualSeal(${k}))">เปิด</button>`:''}</div>`}
@@ -61,7 +61,7 @@ function render(){
   const atkSel=G.sel&&G.sel.kind==='atk';
   $('bar').innerHTML=G.win!==null?'':`<div class="turn">เทิร์น ${G.turnNo} · <b>P${G.t+1}</b> · <span class="ph ${G.phase}">${G.phase.toUpperCase()}</span></div>
     <button class="main big" onclick="act(nextPhase)">${G.phase==='rite'?'ไป War ▶':G.phase==='war'?'ไป Dusk ▶':'จบเทิร์น ✔'}</button>
-    ${atkSel?'<button class="main" onclick="act(atkShrine)">⚔ โจมตี Shrine/Sovereign</button>':''}
+    ${atkSel?'<button class="main" onclick="act(atkShrine)">⚔ โจมตี Sovereign</button>':''}
     <button onclick="G.sel=null;say('');render()">ยกเลิกการเลือก</button>
     <details class="mn"><summary>เครื่องมือ manual</summary><button onclick="manual('g+');render()">Gem+1</button><button onclick="manual('g-');render()">Gem-1</button><button onclick="manual('draw');render()">จั่ว 1</button><button onclick="manual('kill');render()">ทำลาย Spirit</button></details>`;
   const me=G.t,foe=1-G.t;

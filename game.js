@@ -25,7 +25,7 @@ function mkP(el){
   shuffle(deck);
   const sov=inst(pick(by(c=>c.type==='sovereign'),1)[0]);
   return{el,deck,shrine:deck.splice(0,5),hand:deck.splice(0,5),field:Array(NSLOT).fill(null),pool:[],gems:0,sanct:null,seals:[],disc:[],out:[],
-    sov:{card:sov,tier:1},tf:{},mdisc:0};
+    sov:{card:sov,tier:1},tf:{},mdisc:0,turns:0};
 }
 function startGame(){
   G={ps:[mkP($('e0').value),mkP($('e1').value)],t:0,turnNo:0,phase:'rite',summoned:false,sel:null,msg:'',log:[],win:null,debug:$('dbg').checked,modal:null,pick:null,busy:false,warEnded:false};
@@ -124,7 +124,6 @@ async function breakShrine(pi,{by=null,burst=true}={}){
     if(h.burst)await h.burst({pi,foe:1-pi,card:c,by});else log('(ผล Burst ของใบนี้ยังไม่ทำงาน)');
   }
   await emit('shrineDestroyed',{pi,by,card:c});
-  if(!p.shrine.length&&G.win===null){G.win=1-pi;log('P'+(2-pi)+' ชนะ!')}
 }
 async function sealWindow(defPi,trigger,ctx){
   const p=P(defPi);
@@ -155,7 +154,8 @@ async function dawn(){
   G.phase='rite';G.summoned=false;G.warEnded=false;
   if(!p.deck.length){G.win=1-G.t;log('P'+(G.t+1)+' กองหมด แพ้');return}
   draw(G.t,1);
-  let n=p.pool.length+(p.sanct&&num(p.sanct)===90?1:0);
+  p.turns++;
+  const n=Math.min(p.turns,5)+p.pool.length+(p.sanct&&num(p.sanct)===90?1:0);
   const g=Math.min(n,gemCap(G.t));p.gems+=g;
   log('--- เทิร์น P'+(G.t+1)+' Dawn: จั่ว 1, +'+g+' Gem (รวม '+p.gems+')');
   await emit('dawn',{pi:G.t});
@@ -164,7 +164,7 @@ async function nextPhase(){
   if(G.win!==null)return;G.sel=null;say('');
   if(G.phase==='rite'){G.phase='war';return}
   if(G.phase==='war'){
-    const must=spirits(G.t).find(x=>{const h=H(x.sp.card);return h.mustAttack&&!x.sp.silenced&&!x.sp.locked&&x.sp.attacks===0&&!G.warEnded});
+    const must=spirits(G.t).find(x=>{const h=H(x.sp.card);const lt=legalTargets(G.t,x.sp);return h.mustAttack&&!x.sp.silenced&&!x.sp.locked&&x.sp.attacks===0&&!G.warEnded&&(lt.spirits.length||lt.direct)});
     if(must)return say(must.sp.card.th+' ต้องโจมตีก่อนจบ War');
     G.phase='dusk';await duskStart();return;
   }
@@ -280,15 +280,23 @@ function legalTargets(pi,sp){
   if(h.canDirect&&h.canDirect({pi,sp}))direct=true;
   for(const s of sources())if(s.pi===pi&&s.h.canDirectFor&&s.h.canDirectFor(s,pi,sp))direct=true;
   if(P(fp).tf.shrineLock)direct=false;
-  if(!fs.length&&!direct&&!hasSpirit(fp))direct=true;
   return{spirits:H(sp.card).onlyDirect?[]:fs,direct};
+}
+// Sovereign fights through a stand-in spirit: it has no element or tribe, so spirit auras skip it, and it cannot be destroyed
+function sovFighter(pi){const s=P(pi).sov;return newSp({...s.card,atk:s.card.hp[s.tier-1],def:0,el:'',tribe:'',tier:0},[],'sov')}
+const fighter=(pi,slot)=>slot==='sov'?sovFighter(pi):P(pi).field[slot];
+const onBoard=(pi,slot,sp)=>slot==='sov'||P(pi).field[slot]===sp;
+const canSovAttack=pi=>G.phase==='war'&&pi===G.t&&!G.warEnded&&!P(pi).tf.sovAtk&&P(pi).gems>=1&&G.win===null;
+function selectSov(){
+  if(!canSovAttack(G.t))return say('Sovereign โจมตีได้ตาละ 1 ครั้ง ใช้ 1 Gem ในช่วง War');
+  G.sel={kind:'atk',slot:'sov'};say('เลือกเป้าหมายของ Sovereign (จ่าย 1 Gem ตอนเลือกเป้า)');
 }
 const canAttack=(pi,sp)=>G.phase==='war'&&pi===G.t&&!G.warEnded&&!sp.locked&&sp.attacks<maxAtk(pi,sp);
 async function onField(pi,slot){
   if(G.win!==null)return;const sp=P(pi).field[slot];if(!sp)return;const sel=G.sel;
   if(sel&&sel.kind==='manualKill'){G.sel=null;say('');log('(manual) ทำลาย '+sp.card.en);return destroySp(pi,slot,{type:'effect'})}
   if(sel&&sel.kind==='atk'&&pi!==G.t){
-    const a=cur().field[sel.slot],lt=legalTargets(G.t,a);
+    const a=fighter(G.t,sel.slot),lt=legalTargets(G.t,a);
     if(!lt.spirits.some(x=>x.slot===slot))return say('โจมตีเป้านี้ไม่ได้');
     G.sel=null;say('');return doAttack(G.t,sel.slot,{kind:'sp',slot});
   }
@@ -300,7 +308,7 @@ async function onField(pi,slot){
 }
 async function atkShrine(){
   if(!G.sel||G.sel.kind!=='atk')return;
-  const a=cur().field[G.sel.slot],lt=legalTargets(G.t,a);
+  const a=fighter(G.t,G.sel.slot),lt=legalTargets(G.t,a);
   if(!lt.direct)return say('ตอนนี้โจมตี Sovereign/Shrine โดยตรงไม่ได้ ต้องโจมตี Spirit ก่อน');
   const slot=G.sel.slot;G.sel=null;say('');await doAttack(G.t,slot,{kind:'direct'});
 }
@@ -311,7 +319,8 @@ async function boostPrompt(pi,label){
   const n=Math.max(0,k);p.gems-=n;if(n)log('P'+(pi+1)+' จ่าย Karma Boost '+n+' Gem');return n;
 }
 async function doAttack(pi,slot,t){
-  const fp=1-pi,a=P(pi).field[slot];if(!a)return;
+  const fp=1-pi,a=fighter(pi,slot);if(!a)return;
+  if(slot==='sov'){P(pi).gems--;P(pi).tf.sovAtk=1}
   const ctx={pi,fp,a,slot,t,cancelled:false,boostA:0,boostD:0,d:t.kind==='sp'?P(fp).field[t.slot]:null,fs:false};
   a.attacks++;a.battled=true;if(ctx.d)a.hit.push(ctx.d.card.uid);
   log('P'+(pi+1)+' '+a.card.en+' โจมตี '+(ctx.d?ctx.d.card.en:'Sovereign/Shrine'));
@@ -323,11 +332,12 @@ async function doAttack(pi,slot,t){
   await sealWindow(fp,'oppAttack',ctx);
   if(!ctx.cancelled&&ctx.d)await sealWindow(fp,'myAttacked',ctx);
   if(!ctx.cancelled&&!ctx.d)await sealWindow(fp,'shrineDirect',ctx);
-  if(P(pi).field[slot]!==a){cleanBattle(a,ctx.d);return}
+  if(!onBoard(pi,slot,a)){cleanBattle(a,ctx.d);return}
   if(ctx.cancelled){cleanBattle(a,ctx.d);return}
   if(!ctx.d){
     if(P(fp).tf.shrineLock){log('Shrine ถูกป้องกัน');cleanBattle(a);return}
-    await breakShrine(fp,{by:{pi,sp:a},cause:'attack'});
+    if(!P(fp).shrine.length){G.win=pi;log('ตี Sovereign ของ P'+(fp+1)+' สำเร็จ หลัง Shrine หมด — P'+(pi+1)+' ชนะ!');cleanBattle(a);return}
+    await breakShrine(fp,{by:slot==='sov'?null:{pi,sp:a}});
     const hh=a.silenced?{}:H(a.card);if(hh.onShrineHit)await hh.onShrineHit(ctx,{pi,sp:a,slot});
     await sealWindow(fp,'shrineBroken',ctx);
     cleanBattle(a);return;
@@ -344,23 +354,23 @@ async function doAttack(pi,slot,t){
   const byA={type:'combat',by:{pi,sp:a}},byD={type:'combat',by:{pi:fp,sp:d}};
   let killedD=false;
   if(A>D){killedD=await destroySp(fp,t.slot,byA)}
-  else if(A<D){await destroySp(pi,slot,byD)}
+  else if(A<D){if(slot==='sov')log('Sovereign ไม่ถูกทำลาย');else await destroySp(pi,slot,byD)}
   else if(ctx.fs){killedD=await destroySp(fp,t.slot,byA)}
   else{
     let saveA=false,saveD=false;
-    if(sovNum(pi)===23&&sovTier(pi)>=2&&P(pi).gems>=1&&await ask('P'+(pi+1)+': จ่าย 1 Gem ให้ Spirit ไม่ถูกทำลายจาก Double KO?')){P(pi).gems--;saveA=true}
+    if(slot!=='sov'&&sovNum(pi)===23&&sovTier(pi)>=2&&P(pi).gems>=1&&await ask('P'+(pi+1)+': จ่าย 1 Gem ให้ Spirit ไม่ถูกทำลายจาก Double KO?')){P(pi).gems--;saveA=true}
     if(sovNum(fp)===23&&sovTier(fp)>=2&&P(fp).gems>=1&&await ask('P'+(fp+1)+': จ่าย 1 Gem ให้ Spirit ไม่ถูกทำลายจาก Double KO?')){P(fp).gems--;saveD=true}
     byA.doubleKO=byD.doubleKO=true;
     if(!saveD)killedD=await destroySp(fp,t.slot,byA);
     if(!saveA)await destroySp(pi,slot,byD);
   }
-  if(killedD&&P(pi).field[slot]===a){
+  if(killedD&&onBoard(pi,slot,a)){
     if(P(pi).tf.oath&&(P(pi).tf.oathDraws||0)<2){P(pi).tf.oathDraws=(P(pi).tf.oathDraws||0)+1;draw(pi,1)}
     if(ah.onWin)await ah.onWin(ctx,{pi,sp:a,slot});
     await emit('wonBattle',{...ctx,winnerPi:pi});
   }
   for(const [x,xp,sl] of [[a,pi,slot],[d,fp,t.slot]]){
-    if(P(xp).field[sl]===x){const hh=x.silenced?{}:H(x.card);if(hh.afterBattle)await hh.afterBattle(ctx,{pi:xp,sp:x,slot:sl})}
+    if(onBoard(xp,sl,x)){const hh=x.silenced?{}:H(x.card);if(hh.afterBattle)await hh.afterBattle(ctx,{pi:xp,sp:x,slot:sl})}
   }
   cleanBattle(a,d);
 }
@@ -383,7 +393,7 @@ function status(c){
 function show(uid){
   const c=INST[uid];if(!c)return;let st='';
   if(c.type==='spirit')st=`Tier ${c.tier} | ค่าร่าย ${c.cost}${c.re?' (RE '+c.re+')':''} | ATK ${c.atk} / DEF ${c.def}`;
-  else if(c.type==='sovereign')st=`ATK ${c.hp.join('/')} | Ascend ${c.asc.join('/')} Gem`;
+  else if(c.type==='sovereign')st=`ATK ${c.hp.join('/')} | Ascend ${c.asc.join('/')} Gem | โจมตีได้ตาละ 1 ครั้ง (1 Gem)`;
   else if(c.type==='seal')st='วางฟรี | เปิดใช้ '+c.act+' Gem';else st='ค่าร่าย '+c.cost;
   $('detail').innerHTML=`<b>${esc(c.th)}</b><br>${esc(c.en)}<br>${c.id} [${c.rar}] ${c.el} / ${c.type}${c.tribe&&c.type==='spirit'?' / '+esc(c.tribe):''}<br>${st}<br>${status(c)}<hr>${esc(c.text)}`;
 }
@@ -399,7 +409,7 @@ function hint(){
   if(G.win!==null)return 'เกมจบแล้ว กด Start เพื่อเริ่มใหม่';
   const who='P'+(G.t+1);
   if(G.phase==='rite')return `${who} · RITE: คลิกการ์ดในมือที่ขอบเขียวเพื่อเล่น (Spirit T1 ลงฟรี 1 ใบ/เทิร์น · T2-T3 ต้องมีฐานใน Karma Pool แล้วจ่าย Gem · Mantra/Sanctuary จ่าย Gem · Seal วางคว่ำฟรี) · Ascend Sovereign ได้ที่การ์ด Sovereign · เสร็จแล้วกด "ไป War"`;
-  if(G.phase==='war')return `${who} · WAR: คลิก Spirit ของคุณที่จะโจมตี → เลือกเป้า (กรอบเขียว) หรือกดปุ่ม "โจมตี Shrine" (ทำได้เมื่อศัตรูไม่มี Spirit) · เสร็จแล้วกด "ไป Dusk"`;
+  if(G.phase==='war')return `${who} · WAR: คลิก Spirit ของคุณที่จะโจมตี → เลือกเป้า (กรอบเขียว) หรือกดปุ่มโจมตี Sovereign (ทำได้เมื่อศัตรูไม่มี Spirit) · Sovereign ของคุณโจมตีได้ตาละ 1 ครั้ง ใช้ 1 Gem · ชนะเมื่อทำลาย Shrine ครบ 5 ใบแล้วตี Sovereign อีก 1 ครั้ง · เสร็จแล้วกด "ไป Dusk"`;
   return `${who} · DUSK: ทิ้งไพ่ให้เหลือ 7 ใบ (ถ้าเกิน) แล้วกด "จบเทิร์น"`;
 }
 function render(){} // replaced by ui.js
