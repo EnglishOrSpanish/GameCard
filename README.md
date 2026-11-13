@@ -3,7 +3,7 @@
 Prototype of the Karma Cards trading card game (two sides on one screen).
 
 - **Play online:** https://englishorspanish.github.io/GameCard/ (updates when `main` is pushed)
-- **Rules / manual:** [RULES.md](RULES.md) (v1)
+- **Rules / manual:** [RULES.md](RULES.md) (v1.1)
 - Run locally: `python -m http.server 5190` then open http://localhost:5190/
 - Engine: `game.js` · Agni (fire) abilities: `agni.js` · board UI: `ui.js` · board image: `board.webp`
 

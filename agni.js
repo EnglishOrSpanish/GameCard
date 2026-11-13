@@ -117,7 +117,7 @@ def(31,{});
 def(32,{onDefend(ctx,s){s.sp.bt.def+=400}});
 def(33,{async onShrineHit(ctx,s){draw(s.pi,1);const p=P(s.pi);if(!p.hand.length)return;const k=await choose('ทิ้งไพ่ในมือ 1 ใบ',cardList(p.hand));const c=p.hand.splice(Math.max(0,k),1)[0];p.disc.push(c)}});
 def(34,{onAttack(ctx,s){if(ctx.d&&stat(ctx.fp,ctx.d,'def')<=900)s.sp.bt.atk+=400}});
-def(35,{onBaseUsed(ctx){gain(ctx.pi,1)}});
+HND[35]={};   // its old effect (removed as a Reincarnate base) no longer exists under the v1.0 rulebook
 def(36,{passive:({pi})=>P(pi).shrine.length<P(1-pi).shrine.length?{atk:500}:null});
 def(38,{async onSummon(ctx){const p=P(ctx.pi),top=p.deck.splice(0,3);const m=top.filter(c=>c.type==='mantra'&&fire(c));
   if(m.length){const k=await choose('นำ Mantra ธาตุไฟขึ้นมือ 1 ใบ',cardList(m));if(k>=0){const c=m[k];top.splice(top.indexOf(c),1);p.hand.push(c)}}
@@ -175,7 +175,7 @@ def(70,{passive:({pi})=>(spirits(pi).some(x=>kala(x.sp.card))||P(pi).pool.some(k
 def(71,{async onSummon(ctx){if(ctx.how!=='reinc'||P(ctx.pi).pool.length<4)return;
   for(const x of foeSp(ctx.pi,(sp)=>sp.card.tier<=2&&stat(1-ctx.pi,sp,'def')<=2200))await kill(x,eff(ctx.pi))}});
 def(72,{maxAttacks:({pi,sp})=>Math.max(1,sp.hit.length+spirits(1-pi).filter(x=>!sp.hit.includes(x.sp.card.uid)).length),onWin(ctx,s){gain(s.pi,1)}});
-def(73,{maxAttacks:({sp})=>sp.base.some(kala)?2:1});
+def(73,{maxAttacks:({sp})=>sp.baseRef&&kala(sp.baseRef)?2:1});
 def(74,{async onAttack(ctx,s){const fp=1-s.pi,f=P(fp);const o=['ทำลาย Shrine ของตัวเอง 1 ใบ'];const k=[0];
   if(f.gems>=2){o.push('จ่าย 2 Gem ทิ้ง');k.push(1)}o.push('ไม่ทำ (ATK ศัตรู +1200)');
   const c=await choose('P'+(fp+1)+' ต้องเลือกรับผล Asmodeus',o);

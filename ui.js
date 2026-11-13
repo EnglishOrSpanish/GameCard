@@ -25,7 +25,7 @@ function handHtml(pi,active){
   const p=P(pi);
   return p.hand.map((c,i)=>{
     const ok=active&&playable(c);
-    const st=c.type==='spirit'?`⚔${c.atk} 🛡${c.def}${c.tier>1?` · จ่าย ${c.cost}-${c.re}`:''}`:c.type==='seal'?`เปิด ${c.act} Gem`:`ค่า ${c.cost}`;
+    const st=c.type==='spirit'?`⚔${c.atk} 🛡${c.def}${c.tier>1?` · ค่า ${c.cost} / RE ${c.re}`:''}`:c.type==='seal'?`เปิด ${c.act} Gem`:`ค่า ${c.cost}`;
     return `<div class="hc ${ok?'ok':''} ${c.type}" onmouseover="show(${c.uid})" ${active?`onclick="act(()=>onHand(${i}))"`:''}>${dot(c)}
       <div class="nm">${esc(c.th)}</div><div class="tr">${typeLabel(c)} · ${st}</div><div class="tx">${esc(c.text)}</div></div>`}).join('');
 }
@@ -49,8 +49,8 @@ function boardHtml(pi,main){
   h+=zone(Z.hand,showAll?`<div class="hand">${handHtml(pi,active)}</div>`:`<div class="cnt hid"><span>${p.hand.length}</span><small>การ์ดในมือ (ซ่อน)</small></div>`,'handz');
   h+=zone(Z.deck,`<div class="cnt"><span>${p.deck.length}</span><small>Deck</small></div>`);
   h+=zone(Z.pool,`<div class="cnt sm"><span>${p.pool.length}</span><small>Karma Pool</small></div><div class="chips">${p.pool.map((c,j)=>{
-    const ph=H(c).poolAct,ok=active&&ph&&G.phase==='rite'&&ph.can({pi,card:c});
-    return `<span class="${ok?'hl':''}" onmouseover="show(${c.uid})" ${ok?`onclick="act(()=>onPoolAct(${pi},${j}))"`:''}>${esc(c.th)}${ok?' ▶'+ph.label:''}</span>`}).join('')}</div>`);
+    const po=active?poolOptions(pi,c):[],ok=po.length>0;
+    return `<span class="${ok?'hl':''}" onmouseover="show(${c.uid})" ${ok?`onclick="act(()=>onPoolAct(${pi},${j}))"`:''}>${esc(c.th)}${ok?' ▶'+(po.length>1?'เลือก':po[0].label):''}</span>`}).join('')}</div>`);
   h+=zone(Z.trash,`<div class="cnt"><span>${p.disc.length}</span><small>Trash</small></div>${G.debug?`<div class="chips">${p.disc.map(c=>`<span>${esc(c.th)}</span>`).join('')}</div>`:''}`);
   return h;
 }
