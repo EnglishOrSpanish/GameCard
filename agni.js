@@ -15,10 +15,10 @@ const cardList=(arr)=>arr.map(c=>c.th+' ('+c.en+')');
 // ---- Spirits T1 ----
 def(2,{onAttack(ctx,s){s.sp.bt.atk+=300},
   async onDestroyed(ctx){
-    if(G.phase!=='rite'||G.t!==ctx.pi)return;const p=P(ctx.pi);if(p.gems<2||p.field.indexOf(null)<0)return;
-    const cand=p.hand.concat(p.pool).filter(kala);if(!cand.length)return;
-    if(!(await ask('จ่าย 2 Gem เพื่อ Reincarnate กาลอัคนี?')))return;
-    const c=cand[0];await summonReinc(ctx.pi,c,{from:p.hand.includes(c)?'hand':'pool',pay:2});}});
+    if(G.phase!=='rite'||G.t!==ctx.pi)return;const p=P(ctx.pi);
+    const c=p.pool.find(kala);if(!c||!canReinc(ctx.pi,c,{pay:2}))return;
+    if(!(await ask('จ่าย 2 Gem เพื่อ Reincarnate กาลอัคนี จาก Karma Pool? (ใช้โควตา Reincarnate ของเทิร์นนี้)')))return;
+    await doReinc(ctx.pi,c,{pay:2});}});
 def(3,{mustAttack:true,onDestroyed(ctx){if(ctx.cause.doubleKO)gain(ctx.pi,1)}});
 def(4,{act:{label:'สังเวยตัวเอง',can:c=>c.pi===G.t&&G.phase==='rite',
   async run(c){await destroySp(c.pi,c.slot,{type:'sac'});P(c.pi).mdisc+=1;if(P(c.pi).pool.length>=3)draw(c.pi,1)}}});
@@ -45,11 +45,11 @@ def(78,{async main(ctx){for(const pi of [ctx.pi,1-ctx.pi])for(const x of spirits
   async burst(ctx){for(const x of spirits(ctx.foe).filter(x=>x.sp.card.cost<=2))await kill(x,eff(ctx.pi))}});
 async function reincFromPool(pi,pay0,reduce){
   const p=P(pi);if(p.field.indexOf(null)<0)return;
-  const cands=p.pool.filter(c=>c.type==='spirit'&&c.tier===2&&fire(c));if(!cands.length){log('ไม่มี Spirit T2 ธาตุไฟใน Karma Pool');return}
+  const payOf=c=>pay0?0:reincPay(pi,c,reduce);
+  const cands=p.pool.filter(c=>c.type==='spirit'&&c.tier===2&&fire(c)&&canReinc(pi,c,{pay:payOf(c)}));
+  if(!cands.length){log('Reincarnate ไม่ได้ (ไม่มี T2 ธาตุไฟ/ฐาน/Gem หรือใช้โควตาแล้ว)');return}
   const k=await choose('เลือก Spirit T2 ธาตุไฟจาก Karma Pool',cardList(cands));if(k<0)return;
-  const c=cands[k],pay=pay0?0:reincPay(pi,c,reduce);
-  if(p.gems<pay){log('Gem ไม่พอ');return}
-  await summonReinc(pi,c,{from:'pool',pay});
+  await doReinc(pi,cands[k],{pay:payOf(cands[k])});
 }
 def(79,{async main(ctx){await reincFromPool(ctx.pi,false,2)},async burst(ctx){await reincFromPool(ctx.pi,true,0)}});
 def(80,{can:({pi})=>fireSp(pi).length>0,async main(ctx){const t=await pickTemp(ctx.pi,'เลือก Spirit ธาตุไฟ +800 ATK',fireSp(ctx.pi),'atk',800);if(t&&t.sp.card.en.startsWith('KALA-AGNI'))t.sp.noDie=true},
@@ -62,7 +62,7 @@ def(82,{can:({pi,card})=>ownSp(pi,sp=>sp.card.tier===1).length>0||P(pi).hand.som
   async main(ctx){const p=P(ctx.pi),t1=ownSp(ctx.pi,sp=>sp.card.tier===1),fh=p.hand.filter(c=>c!==ctx.card&&fire(c));
     const opts=[],act=[];if(t1.length){opts.push('ทำลาย Spirit Tier 1 ของเรา');act.push('s')}if(fh.length){opts.push('ทิ้งการ์ดไฟจากมือ');act.push('h')}
     const k=await choose('เลือกต้นทุน',opts);if(k<0)return;
-    if(act[k]==='s'){const t=await pickSpirit('เลือก Spirit Tier 1',t1,false);await kill(t,{type:'sac'})}
+    if(act[k]==='s'){const t=await pickSpirit('เลือก Spirit Tier 1',t1,false);if(!t)return;await kill(t,{type:'sac'})}
     else{const j=await choose('ทิ้งการ์ดไฟ',cardList(fh));p.hand.splice(p.hand.indexOf(fh[Math.max(0,j)]),1);p.disc.push(fh[Math.max(0,j)])}
     gain(ctx.pi,2)},burst(ctx){gain(ctx.pi,2)}});
 async function searchDeck(pi,filter,discount){
@@ -117,7 +117,7 @@ def(31,{});
 def(32,{onDefend(ctx,s){s.sp.bt.def+=400}});
 def(33,{async onShrineHit(ctx,s){draw(s.pi,1);const p=P(s.pi);if(!p.hand.length)return;const k=await choose('ทิ้งไพ่ในมือ 1 ใบ',cardList(p.hand));const c=p.hand.splice(Math.max(0,k),1)[0];p.disc.push(c)}});
 def(34,{onAttack(ctx,s){if(ctx.d&&stat(ctx.fp,ctx.d,'def')<=900)s.sp.bt.atk+=400}});
-HND[35]={};   // its old effect (removed as a Reincarnate base) no longer exists under the v1.0 rulebook
+def(35,{onBaseUsed(ctx){gain(ctx.pi,1)}});
 def(36,{passive:({pi})=>P(pi).shrine.length<P(1-pi).shrine.length?{atk:500}:null});
 def(38,{async onSummon(ctx){const p=P(ctx.pi),top=p.deck.splice(0,3);const m=top.filter(c=>c.type==='mantra'&&fire(c));
   if(m.length){const k=await choose('นำ Mantra ธาตุไฟขึ้นมือ 1 ใบ',cardList(m));if(k>=0){const c=m[k];top.splice(top.indexOf(c),1);p.hand.push(c)}}
@@ -125,7 +125,7 @@ def(38,{async onSummon(ctx){const p=P(ctx.pi),top=p.deck.splice(0,3);const m=top
 def(39,{onBoost(ctx,sp,n){sp.bt.atk+=200*n}});
 def(40,{summoned(ctx,s){if(ctx.pi===s.pi&&ctx.tier===2&&!s.sp.tf.v40){s.sp.tf.v40=1;s.sp.temp.atk+=300}}});
 def(41,{poolAct:{label:'ลุกจากหลุมกรรม (1 Gem)',can:({pi})=>P(pi).gems>=1&&P(pi).field.indexOf(null)>=0,
-  async run({pi,card}){P(pi).gems--;if(await summonFree(pi,card,'pool')){const sp=P(pi).field.find(x=>x&&x.card===card);if(sp)sp.banish=true}}}});
+  async run({pi,card}){P(pi).gems--;if(await summonFree(pi,card,'pool')){const sp=P(pi).field.find(x=>x&&x.card===card);if(sp){sp.banish=true;sp.endBanish=true}}}}});
 def(42,{spiritDestroyed(ctx,s){if(ctx.pi===s.pi&&ctx.sp!==s.sp&&!s.sp.tf.d42){s.sp.tf.d42=1;draw(s.pi,1)}}});
 def(43,{onAttack(ctx,s){if(s.sp.sumTurn===G.turnNo)s.sp.bt.atk+=300}});
 def(44,{});
@@ -162,10 +162,9 @@ def(63,{act:{label:'ล่อลวง (DEF ศัตรู -ครึ่ง)',c
 def(64,{async onDestroyed(ctx){if(P(ctx.pi).gems<2)return;const c=foeSp(ctx.pi,x=>x.card.atk<ctx.card.atk);if(!c.length)return;
   if(await ask('จ่าย 2 Gem ทำลาย Spirit ศัตรูที่ ATK ต่ำกว่า?')){P(ctx.pi).gems-=2;await pickKill(ctx.pi,'เลือกเป้าหมาย',c,eff(ctx.pi))}}});
 def(65,{onSummon(ctx){if(ctx.how!=='reinc')return;const f=P(1-ctx.pi);if(!f.hand.length)return;const c=f.hand.splice(rnd(f.hand.length),1)[0];f.disc.push(c);log('ศัตรูทิ้ง '+c.en);if(c.type==='mantra')gain(ctx.pi,1)}});
-def(66,{poolAct:{label:'Reincarnate (สังเวยวิญญาณไฟอีก 1)',
-  can:({pi,card})=>P(pi).field.indexOf(null)>=0&&P(pi).pool.some(c=>c!==card&&c.type==='spirit'&&fire(c))&&P(pi).gems>=reincPay(pi,card),
-  async run({pi,card}){const p=P(pi),c=p.pool.filter(x=>x!==card&&x.type==='spirit'&&fire(x));const k=await choose('เลือกวิญญาณที่จะนำออกนอกเกม',cardList(c));if(k<0)return;
-    p.pool.splice(p.pool.indexOf(c[k]),1);p.out.push(c[k]);await summonReinc(pi,card,{from:'pool',pay:reincPay(pi,card)})}}});
+def(66,{poolAct:{label:'Reincarnate (ฐานไฟออกนอกเกม)',
+  can:({pi,card})=>canReinc(pi,card),
+  run:({pi,card})=>doReinc(pi,card,{baseTo:'out'})}});
 def(67,{passive:({pi})=>sovTier(pi)>=2?{atk:400,def:400}:null});
 def(68,{act:{label:'ตีดาบ (1 Gem: ไฟทุกใบ +300)',can:c=>c.pi===G.t&&G.phase==='rite'&&!c.sp.tf.a&&P(c.pi).gems>=1,
   run(c){c.sp.tf.a=1;P(c.pi).gems--;for(const x of fireSp(c.pi))x.sp.temp.atk+=300}}});

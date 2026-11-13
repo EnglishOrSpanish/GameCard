@@ -9,7 +9,7 @@ button{padding:5px 10px;background:#262638;color:var(--ink);border:1px solid var
 button:hover{background:#34344d}
 button.main{background:linear-gradient(#8a6a1e,#5e4610);font-weight:700}
 button.big{display:block;width:100%;font-size:15px;padding:9px;margin:8px 0}
-#app{display:grid;grid-template-columns:minmax(230px,1fr) min(58vw,108vh) minmax(230px,1fr);gap:10px;height:100vh;padding:8px}
+#app{display:grid;grid-template-columns:minmax(230px,1fr) min(58vw,80vh) minmax(230px,1fr);gap:10px;height:100vh;padding:8px}
 aside{display:flex;flex-direction:column;gap:8px;min-height:0}
 #left h1{font:600 18px Georgia,serif;letter-spacing:3px;color:var(--gold);margin:0;text-align:center}
 .box{background:var(--panel);border:1px solid #3a3550;border-radius:6px;padding:8px}
@@ -17,13 +17,24 @@ aside{display:flex;flex-direction:column;gap:8px;min-height:0}
 #msg{color:#ffd35c;font-weight:700;min-height:18px}
 .turn{font-size:14px}.ph{padding:1px 8px;border-radius:10px;background:#444}.ph.rite{background:#2c6e8c}.ph.war{background:#8c2c2c}.ph.dusk{background:#5a2c8c}
 #log{flex:1;min-height:80px;overflow:auto;font-size:11px;line-height:1.5;color:#c9c2ad}
-#center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:0}
+#center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3.2vh;min-height:0}
 .board{position:relative;aspect-ratio:1672/941;background:url(board.webp) center/100% 100%;border-radius:10px;container-type:inline-size;border:2px solid #2a2a3c}
 .board.main{width:100%;box-shadow:0 0 24px #d4b25c55;border-color:var(--gold)}
-.board.opp{width:52%;filter:saturate(.8)}
-.board.opp::after{content:"";position:absolute;inset:0;background:#0006;border-radius:8px;pointer-events:none}
-.who{position:absolute;left:50%;top:-2.2cqw;transform:translateX(-50%);z-index:3;font-size:1.5cqw;background:#000a;padding:.1cqw 1.2cqw;border-radius:2cqw;color:#bbb;white-space:nowrap}
-.board.opp .who{top:-3.4cqw;font-size:2.4cqw}.who.on{color:#ffd35c}
+.board.opp{width:100%}
+/* mirror: the opponent's board is turned 180° so both Spirit rows meet in the middle; every zone's content turns back so text stays upright */
+.board.mirror{transform:rotate(180deg)}
+.board.mirror .zn>*{transform:rotate(180deg)}
+.who{position:absolute;left:50%;bottom:-2.4cqw;transform:translateX(-50%);z-index:3;font-size:1.4cqw;background:#000a;padding:.1cqw 1.2cqw;border-radius:2cqw;color:#bbb;white-space:nowrap}
+.board.mirror .who{transform:translateX(-50%) rotate(180deg)}.who.on{color:#ffd35c}
+/* card picker (Mulligan): whole cards in a grid */
+.mbox.cpick{max-width:min(1100px,94vw)}
+.cgrid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0}
+.cfull{width:190px;min-height:250px;background:linear-gradient(160deg,#2a2848,#15152c);border:2px solid #6b6585;border-radius:10px;padding:8px;cursor:pointer;display:flex;flex-direction:column;gap:4px;font-size:12px;position:relative}
+.cfull .art{height:70px;border:1px dashed #555;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#555;font-size:11px}
+.cfull b{font-size:14px;color:#fff}.cfull .tr{font-size:11px;color:var(--cy)}.cfull .st{font-weight:700;color:#ffd35c}
+.cfull .tx{font-size:11px;color:#c9c2ad;line-height:1.35}
+.cfull.on{border-color:#ff5a5a;box-shadow:0 0 12px #ff5a5a88;opacity:.75}
+.cfull.on::after{content:"เปลี่ยน";position:absolute;top:8px;right:8px;background:#ff5a5a;color:#fff;font-size:11px;padding:1px 6px;border-radius:8px}
 .zn{position:absolute;padding:.35cqw;display:flex;flex-direction:column;overflow:hidden}
 .cnt{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-shadow:0 0 .6cqw #000,0 0 .6cqw #000}
 .cnt span{font:700 3.6cqw Georgia,serif;color:#fff;line-height:1}.cnt small{font-size:1.05cqw;color:#e6d9ae}

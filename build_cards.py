@@ -1,9 +1,17 @@
-import openpyxl, re, json, sys
+import re, json, sys
+try:
+    import openpyxl
+except ImportError:
+    openpyxl = None
 src = sys.argv[1]
 ELS = ['Agni', 'Tamas', 'Nira', 'Vayu', 'Dharti', 'Jyoti']
-ws = openpyxl.load_workbook(src, data_only=True).active
+if src.lower().endswith('.csv'):  # Google Sheet export (File > Download > CSV, or the export link in README)
+    import csv
+    sheet_rows = list(csv.reader(open(src, encoding='utf-8')))
+else:
+    sheet_rows = list(openpyxl.load_workbook(src, data_only=True).active.iter_rows(values_only=True))
 out, bad = [], []
-for r in ws.iter_rows(min_row=2, values_only=True):
+for r in sheet_rows[1:]:
     if not r[0]:
         continue
     m = re.match(r'PRL-(\d+) \[(\w+)\]', r[0])

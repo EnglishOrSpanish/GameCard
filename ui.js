@@ -65,12 +65,25 @@ function render(){
     <button onclick="G.sel=null;say('');render()">ยกเลิกการเลือก</button>
     <details class="mn"><summary>เครื่องมือ manual</summary><button onclick="manual('g+');render()">Gem+1</button><button onclick="manual('g-');render()">Gem-1</button><button onclick="manual('draw');render()">จั่ว 1</button><button onclick="manual('kill');render()">ทำลาย Spirit</button></details>`;
   const me=G.t,foe=1-G.t;
-  $('b1').innerHTML=boardHtml(foe,false);$('b0').innerHTML=boardHtml(me,true);
-  $('b0').className='board main'+(G.phase==='war'?' war':'');$('b1').className='board opp';
+  $('b1').innerHTML=boardHtml(foe,true);$('b0').innerHTML=boardHtml(me,true);
+  $('b0').className='board main'+(G.phase==='war'?' war':'');$('b1').className='board opp mirror';
   $('log').innerHTML=G.log.slice(-80).map(esc).join('<br>');$('log').scrollTop=1e9;
   const m=$('modal');
-  if(G.modal){m.className='';m.style.display='flex';m.innerHTML=`<div class="mbox"><div class="mt">${esc(G.modal.title)}</div>${G.modal.labels.map((l,i)=>`<button onclick="modalClick(${i})">${esc(l)}</button>`).join('')}${G.modal.labels.length>2?'<button class="skip" onclick="modalClick(-1)">ข้าม</button>':''}</div>`}
+  if(G.cardPick){const c=G.cardPick;m.className='';m.style.display='flex';
+    m.innerHTML=`<div class="mbox cpick"><div class="mt">${esc(c.title)}</div><div class="cgrid">${c.cards.map((x,i)=>fullCard(x,c.sel.has(i),i)).join('')}</div>
+      ${c.multi?`<button class="main" onclick="cardPickDone()">${esc(c.confirm)}${c.sel.size?' (เปลี่ยน '+c.sel.size+' ใบ)':' (ไม่เปลี่ยน)'}</button>`:''}</div>`}
+  else if(G.modal){m.className='';m.style.display='flex';m.innerHTML=`<div class="mbox"><div class="mt">${esc(G.modal.title)}</div>${G.modal.labels.map((l,i)=>`<button onclick="modalClick(${i})">${esc(l)}</button>`).join('')}${G.modal.labels.length>2?'<button class="skip" onclick="modalClick(-1)">ข้าม</button>':''}</div>`}
   else if(G.pick){m.className='top';m.style.display='flex';m.innerHTML=`<div class="mbox"><div class="mt">${esc(G.pick.title)}</div>คลิก Spirit ที่มีกรอบเขียวบนกระดาน ${G.pick.allowSkip?'<button class="skip" onclick="skipPick()">ข้าม</button>':''}</div>`}
   else{m.style.display='none';m.className=''}
 }
+function fullCard(c,on,i){
+  const st=c.type==='spirit'?`ATK ${c.atk} / DEF ${c.def}${c.tier>1?` · ค่า ${c.cost} · RE ${c.re}`:''}`:c.type==='seal'?`เปิดใช้ ${c.act} Gem`:`ค่าร่าย ${c.cost}`;
+  return `<div class="cfull ${on?'on':''}" onclick="cardPickToggle(${i})" onmouseover="show(${c.uid})"><div class="art">ART</div><b>${esc(c.th)}</b>
+    <div class="tr">${typeLabel(c)} · ${c.el}</div><div class="st">${st}</div><div class="tx">${esc(c.text)}</div></div>`;
+}
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape'||!G)return;
+  if(G.pick&&G.pick.allowSkip)return skipPick();
+  if(G.sel){G.sel=null;say('');render()}
+});
 function fullscreen(){const d=document;if(d.fullscreenElement)d.exitFullscreen();else d.documentElement.requestFullscreen()}

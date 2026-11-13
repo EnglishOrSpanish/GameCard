@@ -38,6 +38,13 @@ function choose(title,labels){
   if(G.auto)return Promise.resolve(G.auto(title,labels));
   return new Promise(res=>{G.modal={title,labels,res};render()});
 }
+// Shows whole cards; resolves to the chosen indexes (multi) or one index
+function chooseCards(title,cards,{multi=false,confirm='ยืนยัน'}={}){
+  if(G.auto)return Promise.resolve(G.auto(title,cards,multi?'cards-multi':'cards'));
+  return new Promise(res=>{G.cardPick={title,cards,multi,confirm,sel:new Set(),res};render()});
+}
+function cardPickToggle(i){const c=G.cardPick;if(!c.multi){G.cardPick=null;c.res(i);render();return}c.sel.has(i)?c.sel.delete(i):c.sel.add(i);render()}
+function cardPickDone(){const c=G.cardPick;G.cardPick=null;c.res(c.multi?[...c.sel]:-1);render()}
 async function ask(title){return (await choose(title,['ใช่','ไม่']))===0}
 function pickSpirit(title,cands,allowSkip=true){
   if(!cands.length)return Promise.resolve(null);
@@ -50,7 +57,7 @@ function skipPick(){const p=G.pick;G.pick=null;p.res(null);render()}
 async function act(fn){
   if(G.busy)return;G.busy=true;
   try{await fn()}catch(e){console.error(e);say('ERROR: '+e.message);if(G.log)log('ERROR '+e.stack)}
-  G.busy=false;G.modal=null;G.pick=null;if(G.win!==null&&G.win!==undefined)say('');render();
+  G.busy=false;G.modal=null;G.pick=null;G.cardPick=null;if(G.win!==null&&G.win!==undefined)say('');render();
 }
 
 // ---------- helpers ----------
@@ -68,20 +75,41 @@ function costOf(pi,c){
   if(c.discTurn===G.turnNo)n-=1;
   return Math.max(0,n);
 }
-// Reincarnate (a Tier 2/3 spirit from the Karma Pool back to the field) costs its RE; no base needed
+// Reincarnate: once per turn, from any source. A Tier 2/3 spirit in the Karma Pool returns to the field by sending another
+// spirit of a matching element from the Pool to the Trash as its base and paying its RE. It is banished when destroyed.
 function reincPay(pi,card,extra=0){
   let pay=Math.max(0,card.re-extra);
   if(pay>0&&isEl(card,'Agni')&&spirits(pi).some(x=>num(x.sp.card)===9&&!x.sp.silenced))pay=Math.max(1,pay-1);
   return pay;
 }
-// Normal summon of a Tier 2/3 spirit from hand: full cost, needs a base spirit on the field or in the Karma Pool (not consumed);
-// a base of another element costs +1 Gem
-function baseInfo(pi,card){
-  const els=H(card).baseEls||[card.el],p=P(pi);
-  const all=p.field.filter(Boolean).map(s=>s.card).concat(p.pool);
-  const match=all.filter(b=>els.some(e=>isEl(b,e)));
-  const free=card.tier===2&&all.some(b=>num(b)===31);
-  return{all,match,extra:(match.length||free||!all.length)?0:1};
+const reincUsed=pi=>!!P(pi).tf.reinc;
+function reincBases(pi,card){
+  const els=H(card).baseEls||[card.el];
+  return P(pi).pool.filter(b=>b!==card&&b.type==='spirit'&&(els.some(e=>isEl(b,e))||(num(b)===31&&card.tier===2)));
+}
+function canReinc(pi,card,{pay}={}){
+  const p=P(pi),h=H(card);
+  return card.type==='spirit'&&card.tier>=2&&p.pool.includes(card)&&!reincUsed(pi)&&p.field.indexOf(null)>=0
+    &&reincBases(pi,card).length>0&&p.gems>=(pay!==undefined?pay:reincPay(pi,card))&&!(h.canSummon&&!h.canSummon(pi));
+}
+function reincBlock(pi,card,pay){
+  if(reincUsed(pi))return 'ใช้ Reincarnate ไปแล้วในเทิร์นนี้ (ได้ 1 ครั้ง/เทิร์น)';
+  if(!reincBases(pi,card).length)return 'ต้องมี Spirit ธาตุเดียวกันอีกใบใน Karma Pool เป็นฐาน';
+  if(P(pi).gems<pay)return 'Gem ไม่พอ ต้อง '+pay;
+  if(P(pi).field.indexOf(null)<0)return 'สนามเต็ม';
+  return '';
+}
+// pay: Gem to pay (default RE); baseTo: 'trash' (rule) or 'out' (cards that banish the base)
+async function doReinc(pi,card,{pay,baseTo='trash'}={}){
+  const p=P(pi);if(pay===undefined)pay=reincPay(pi,card);
+  const why=reincBlock(pi,card,pay);if(why){say(why);log(why);return false}
+  const bases=reincBases(pi,card);let base=bases[0];
+  if(bases.length>1){const k=await choose('เลือก Spirit ใน Karma Pool ที่จะใช้เป็นฐาน ('+(baseTo==='out'?'ออกนอกเกม':'ลง Trash')+')',bases.map(b=>b.th+' ('+b.en+')'));if(k<0)return false;base=bases[k]}
+  p.tf.reinc=1;
+  p.pool.splice(p.pool.indexOf(base),1);(baseTo==='out'?p.out:p.disc).push(base);
+  log('ฐาน '+base.th+' จาก Karma Pool -> '+(baseTo==='out'?'นอกเกม':'Trash'));
+  const bh=H(base);if(bh.onBaseUsed)await bh.onBaseUsed({pi,target:card,base});
+  return summonReinc(pi,card,{from:'pool',pay,base});
 }
 
 // event sources: spirits, sanctuary, sovereign tiers (acting player first)
@@ -164,12 +192,9 @@ function sealBlocked(ctx,seal){
 // Mulligan: once per game each player may put any cards of the opening hand back, reshuffle and draw the same number
 async function mulligan(){
   for(const pi of [0,1]){
-    G.t=pi;const p=P(pi),mark=new Set();
-    for(let guard=0;guard<30;guard++){
-      const labels=['✔ ยืนยัน'+(mark.size?' (เปลี่ยน '+mark.size+' ใบ)':' (ไม่เปลี่ยน)')].concat(p.hand.map((c,i)=>(mark.has(i)?'☑ ':'☐ ')+c.th));
-      const k=await choose('P'+(pi+1)+' Mulligan (ทำได้ 1 ครั้งต่อเกม)\nเลือกการ์ดที่จะเปลี่ยน แล้วกดยืนยัน',labels);
-      if(k<=0)break;mark.has(k-1)?mark.delete(k-1):mark.add(k-1);
-    }
+    G.t=pi;const p=P(pi);
+    const picked=await chooseCards('P'+(pi+1)+' · Mulligan (ทำได้ 1 ครั้งต่อเกม): คลิกการ์ดที่จะเปลี่ยน แล้วกดยืนยัน',p.hand.slice(),{multi:true,confirm:'ยืนยัน'});
+    const mark=new Set(Array.isArray(picked)?picked:[]);
     if(mark.size){const back=[...mark].sort((a,b)=>b-a).map(i=>p.hand.splice(i,1)[0]);p.deck.push(...back);shuffle(p.deck);draw(pi,back.length);log('P'+(pi+1)+' Mulligan '+back.length+' ใบ')}
   }
   G.t=rnd(2);log('ผู้เล่นคนแรก (สุ่ม): P'+(G.t+1));
@@ -181,9 +206,8 @@ async function dawn(){
   G.phase='rite';G.summoned=false;G.warEnded=false;
   if(!firstTurn()){if(!p.deck.length){G.win=1-G.t;log('P'+(G.t+1)+' กองหมด แพ้');return}draw(G.t,1)}
   p.turns++;
-  const n=Math.min(p.turns,5)+p.pool.length+(p.sanct&&num(p.sanct)===90?1:0);
-  const g=Math.min(n,gemCap(G.t));p.gems+=g;
-  log('--- เทิร์น P'+(G.t+1)+' Dawn: '+(firstTurn()?'ผู้เล่นคนแรกไม่จั่ว':'จั่ว 1')+', +'+g+' Gem (รวม '+p.gems+')');
+  const base=Math.min(p.turns,gemCap(G.t)),bonus=p.pool.length+(p.sanct&&num(p.sanct)===90?1:0),g=base+bonus;p.gems+=g;
+  log('--- เทิร์น P'+(G.t+1)+' Dawn: '+(firstTurn()?'ผู้เล่นคนแรกไม่จั่ว':'จั่ว 1')+', +'+g+' Gem (เทิร์น '+base+' + Pool '+bonus+', รวม '+p.gems+')');
   await emit('dawn',{pi:G.t});
 }
 async function nextPhase(){
@@ -198,7 +222,7 @@ async function nextPhase(){
   // end of turn cleanup
   G.ps.forEach((q,qi)=>q.field.forEach((s,i)=>{if(s){s.temp={atk:0,def:0};s.bt={atk:0,def:0};s.silenced=false;s.noDie=false;
     if(s.locked&&qi===G.t&&G.turnNo>s.lockedAt)s.locked=false}}));
-  for(const x of spirits(G.t).concat(spirits(1-G.t))){if(x.sp.banish&&P(x.pi).field[x.slot]===x.sp){P(x.pi).field[x.slot]=null;P(x.pi).out.push(x.sp.card);log(x.sp.card.en+' ออกนอกเกม')}}
+  for(const x of spirits(G.t).concat(spirits(1-G.t))){if(x.sp.endBanish&&P(x.pi).field[x.slot]===x.sp){P(x.pi).field[x.slot]=null;P(x.pi).out.push(x.sp.card);log(x.sp.card.en+' ออกนอกเกม')}}
   G.t=1-G.t;await dawn();
 }
 async function duskStart(){
@@ -229,23 +253,22 @@ async function summonFree(pi,card,from){ // tier-1 style summon
   const src=from==='pool'?p.pool:p.hand;src.splice(src.indexOf(card),1);
   p.field[slot]=newSp(card,[],'free');await afterSummon(pi,slot,'free');return true;
 }
-async function summonNormal(pi,card,{base,pay}){
+// Normal summon of a Tier 2/3 spirit from hand: full cost, no base
+async function summonNormal(pi,card,{pay}){
   const p=P(pi),slot=p.field.indexOf(null);if(slot<0){say('สนามเต็ม');return false}
   p.gems-=pay;p.hand.splice(p.hand.indexOf(card),1);
-  p.field[slot]=newSp(card,[],'normal');p.field[slot].baseRef=base;
+  p.field[slot]=newSp(card,[],'normal');
   if(pay)log('อัญเชิญจ่าย '+pay+' Gem');
-  const bh=H(base);if(bh.onBaseUsed)await bh.onBaseUsed({pi,target:card,base});
   await afterSummon(pi,slot,'normal');return true;
 }
-// Reincarnate: bring a spirit from the Karma Pool (or, for card effects, the hand) onto the field, paying `pay`
-async function summonReinc(pi,card,{from='hand',pay=0}={}){
+// Puts a Karma Pool spirit on the field as Reincarnated (banished when destroyed). Rule checks live in doReinc.
+async function summonReinc(pi,card,{pay=0,base=null}={}){
   const p=P(pi),slot=p.field.indexOf(null);if(slot<0){say('สนามเต็ม');return false}
-  if(p.gems<pay){say('Gem ไม่พอ');return false}
-  const src=from==='pool'?p.pool:p.hand;src.splice(src.indexOf(card),1);
-  p.gems-=pay;p.field[slot]=newSp(card,[],'reinc');
+  p.pool.splice(p.pool.indexOf(card),1);
+  p.gems-=pay;const sp=newSp(card,[],'reinc');sp.banish=true;sp.baseRef=base;p.field[slot]=sp;
   if(pay)log('Reincarnate จ่าย '+pay+' Gem');
   await afterSummon(pi,slot,'reinc');
-  await emit('reincSummoned',{pi,sp:p.field[slot]});
+  await emit('reincSummoned',{pi,sp});
   return true;
 }
 async function playSpirit(i){
@@ -256,12 +279,8 @@ async function playSpirit(i){
     if(G.summoned)return say('Tier 1 ลงได้ 1 ใบ/เทิร์น');
     G.summoned=true;return summonFree(G.t,c,'hand');
   }
-  const info=baseInfo(G.t,c);
-  if(!info.all.length)return say('ต้องมี Spirit ในสนามหรือ Karma Pool เป็นฐาน');
-  const pay=c.cost+info.extra;if(p.gems<pay)return say('Gem ไม่พอ ต้องจ่าย '+pay+(info.extra?' (รวมค่าข้ามธาตุ 1)':''));
-  const cands=info.match.length?info.match:info.all;let base=cands[0];
-  if(cands.length>1){const k=await choose('เลือก Spirit ที่เป็นฐาน (ไม่ถูกใช้ไป)',cands.map(b=>b.th+' ('+b.en+')'));if(k<0)return;base=cands[k]}
-  await summonNormal(G.t,c,{base,pay});
+  const pay=c.cost;if(p.gems<pay)return say('Gem ไม่พอ ต้องจ่าย '+pay);
+  await summonNormal(G.t,c,{pay});
 }
 async function playMantra(i){
   const p=cur(),c=p.hand[i],h=H(c);
@@ -296,8 +315,7 @@ async function onHand(i){
 function poolOptions(pi,card){
   const o=[];if(pi!==G.t||G.phase!=='rite'||G.win!==null)return o;
   const h=H(card);
-  if(card.type==='spirit'&&card.tier>=2&&P(pi).field.indexOf(null)>=0&&P(pi).gems>=reincPay(pi,card)&&!(h.canSummon&&!h.canSummon(pi)))
-    o.push({label:'Reincarnate ('+reincPay(pi,card)+' Gem)',run:()=>summonReinc(pi,card,{from:'pool',pay:reincPay(pi,card)})});
+  if(canReinc(pi,card))o.push({label:'Reincarnate ('+reincPay(pi,card)+' Gem + ฐาน 1)',run:()=>doReinc(pi,card)});
   if(h.poolAct&&h.poolAct.can({pi,card}))o.push({label:h.poolAct.label,run:()=>h.poolAct.run({pi,card})});
   return o;
 }
@@ -442,7 +460,7 @@ function show(uid){
 function playable(c){
   if(G.phase!=='rite'||G.win!==null)return false;const p=cur();
   if(c.type==='spirit'){if(p.field.indexOf(null)<0)return false;const h=H(c);if(h.canSummon&&!h.canSummon(G.t))return false;
-    if(c.tier===1)return !G.summoned;const bi=baseInfo(G.t,c);return bi.all.length>0&&p.gems>=c.cost+bi.extra}
+    if(c.tier===1)return !G.summoned;return p.gems>=c.cost}
   if(c.type==='mantra'){const h=H(c);return p.gems>=costOf(G.t,c)&&!(h.can&&!h.can({pi:G.t,card:c}))}
   if(c.type==='seal')return p.seals.length<3;
   return p.gems>=costOf(G.t,c);
@@ -450,7 +468,7 @@ function playable(c){
 function hint(){
   if(G.win!==null)return 'เกมจบแล้ว กด Start เพื่อเริ่มใหม่';
   const who='P'+(G.t+1);
-  if(G.phase==='rite')return `${who} · RITE: คลิกการ์ดในมือที่ขอบเขียวเพื่อเล่น (Spirit T1 ลงฟรี 1 ใบ/เทิร์น · T2-T3 ต้องมี Spirit เป็นฐานในสนามหรือ Pool แล้วจ่ายค่าร่ายเต็ม · ชี้ที่ Karma Pool เพื่อ Reincarnate (จ่าย RE) · Mantra/Sanctuary จ่าย Gem · Seal วางคว่ำฟรี) · Ascend Sovereign ได้ที่การ์ด Sovereign · เสร็จแล้วกด "ไป War"`;
+  if(G.phase==='rite')return `${who} · RITE: คลิกการ์ดในมือที่ขอบเขียวเพื่อเล่น (Spirit T1 ลงฟรี 1 ใบ/เทิร์น · T2-T3 จ่ายค่าร่ายเต็ม · Reincarnate 1 ครั้ง/เทิร์น: คลิก Spirit T2-T3 ใน Karma Pool (ใช้ฐานธาตุเดียวกันจาก Pool ลง Trash + จ่าย RE; ตายแล้วออกนอกเกม) · Mantra/Sanctuary จ่าย Gem · Seal วางคว่ำฟรี) · Ascend Sovereign ได้ที่การ์ด Sovereign · เสร็จแล้วกด "ไป War"`;
   if(G.phase==='war'&&firstTurn())return `${who} · WAR: เทิร์นแรกของเกม ผู้เล่นคนแรกโจมตีไม่ได้ กด "ไป Dusk"`;
   if(G.phase==='war')return `${who} · WAR: คลิก Spirit ของคุณที่จะโจมตี → เลือกเป้า (กรอบเขียว) หรือกดปุ่มโจมตี Sovereign (ทำได้เมื่อศัตรูไม่มี Spirit) · Sovereign ของคุณโจมตีได้ตาละ 1 ครั้ง ใช้ 1 Gem · ชนะเมื่อทำลาย Shrine ครบ 5 ใบแล้วตี Sovereign อีก 1 ครั้ง · เสร็จแล้วกด "ไป Dusk"`;
   return `${who} · DUSK: ทิ้งไพ่ให้เหลือ 7 ใบ (ถ้าเกิน) แล้วกด "จบเทิร์น"`;
